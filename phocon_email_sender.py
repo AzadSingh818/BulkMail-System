@@ -155,62 +155,6 @@ class PHOCONFastEmailSender:
                 valid_emails.append(email)
         
         return valid_emails
-    
-    # def create_conference_invitation_email(self, doctor_name):
-    #     """Template 1: Conference invitation email content"""
-    #     subject = "Invitation to PHOCON 2025 - 28th Annual Pediatric Hematology Oncology Conference"
-        
-    #     body = f"""
-    #     <html>
-    #     <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-    #     <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-        
-    #     <p style="font-size: 16px;"><strong>Dear {doctor_name}</strong></p>
-        
-    #     <p style="font-size: 14px;">We are excited to invite you to the <strong>28th Annual Pediatric Hematology Oncology Conference – PHOCON 2025</strong>, hosted by Kasturba Medical College, Manipal.</p>
-        
-    #     <div style="background-color: #f8f9fa; padding: 15px; border-left: 4px solid #007bff; margin: 20px 0;">
-    #     <p style="margin: 0; font-size: 14px;"><strong>📅 Date:</strong> 28th November 2025</p>
-    #     <p style="margin: 0; font-size: 14px;"><strong>🕗 Time:</strong> 8:30 AM onwards</p>
-    #     <p style="margin: 0; font-size: 14px;"><strong>📍 Venue:</strong> Kasturba Medical College, Manipal</p>
-    #     </div>
-        
-    #     <p style="font-size: 14px;"><strong>🎯 6 Specialized Workshops:</strong></p>
-    #     <ul style="font-size: 14px; padding-left: 20px;">
-    #     <li>Nursing Workshop</li>
-    #     <li>Pediatric Neuro-Oncology</li>
-    #     <li>Genetics in Pediatric Hematology & Oncology</li>
-    #     <li>Pediatric Hemopoietic Stem Cell Transplantation</li>
-    #     <li>Nutrition Workshop</li>
-    #     <li>INPHOG CRC Training</li>
-    #     </ul>
-        
-    #     <div style="text-align: center; margin: 25px 0;">
-    #     <a href="https://followmyevent.com/phocon-2025/" style="background-color: #007bff; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-size: 16px; font-weight: bold;">
-    #     🔗 REGISTER NOW
-    #     </a>
-    #     </div>
-        
-    #     <p style="font-size: 14px;"><strong>📞 For queries:</strong> +91 63646 90353</p>
-        
-    #     <p style="font-size: 14px;">We look forward to welcoming you to PHOCON 2025!</p>
-        
-    #     <div style="text-align: center; margin: 20px 0;">
-    #     <img src="cid:phocon_conference_image" style="max-width: 100%; height: auto; border-radius: 8px;" alt="PHOCON Conference Invitation">
-    #     </div>
-        
-    #     <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
-    #     <p style="font-size: 14px; margin: 0;">Warm Regards,</p>
-    #     <p style="font-size: 14px; margin: 0;"><strong>PHOCON 2025 Team</strong></p>
-    #     <p style="font-size: 12px; color: #666; margin: 10px 0 0 0;">Kasturba Medical College, Manipal</p>
-    #     </div>
-        
-    #     </div>
-    #     </body>
-    #     </html>
-    #     """
-        
-    #     return subject, body
 
     def create_conference_invitation_email(self, doctor_name):
         """Template 1: Conference invitation email content"""
@@ -626,105 +570,115 @@ class PHOCONFastEmailSender:
             success_file = f"successful_emails_fast_template{self.selected_template}_{timestamp}.xlsx"
             success_df.to_excel(success_file, index=False)
             print(f"💾 Successful emails saved to: {success_file}")
+        
+        # Return both lists for use by app.py
+        return successful_list, failed_list
 
-def main():
-    print("="*70)
-    print("🚀 PHOCON 2025 FAST BULK EMAIL SENDER")
-    print("⚡ Multi-threaded • High Performance • Gmail Safe")
-    print("📧 Email: admin@phocon2025.com")
-    print("="*70)
-    
-    # File paths
-    excel_path = r"C:\Users\Azad Singh\OneDrive\Desktop\pythone\PHO_List-with email id.xlsx"
-    conference_image_path = r"C:\Users\Azad Singh\OneDrive\Desktop\pythone\PHOCON  Workshop Creative.jpeg"
-    abstract_image_path = r"C:\Users\Azad Singh\Downloads\PHOCON Abstract Submission.jpeg"
-    creative_image_path = r"C:\Users\Azad Singh\OneDrive\Desktop\pythone\Creative.jpeg"
-    print("\n📁 Step 1: File validation...")
-    if not os.path.exists(excel_path):
-        print(f"❌ Excel file not found: {excel_path}")
-        return
-    
-    print(f"✅ Excel file found: {excel_path}")
-    
-    if os.path.exists(conference_image_path):
-        print(f"✅ Conference image found: {os.path.basename(conference_image_path)}")
-    else:
-        print(f"⚠  Conference image not found: {os.path.basename(conference_image_path)}")
-    
-    if os.path.exists(abstract_image_path):
-        print(f"✅ Abstract image found: {os.path.basename(abstract_image_path)}")
-    else:
-        print(f"⚠  Abstract image not found: {os.path.basename(abstract_image_path)}")
-    
-    if os.path.exists(creative_image_path):
-        print(f"✅ Creative image found: {os.path.basename(creative_image_path)}")
-    else:
-        print(f"⚠  Creative image not found: {os.path.basename(creative_image_path)}")
-    
-    # Create email sender instance
-    email_sender = PHOCONFastEmailSender(excel_path, conference_image_path, abstract_image_path, creative_image_path)
-    
-    print("\n📧 Step 2: Select Email Template")
-    if not email_sender.select_email_template():
-        print("❌ Template selection cancelled.")
-        return
-    
-    print("\n⚡ Step 3: Select Performance Mode")
-    if not email_sender.select_performance_mode():
-        print("❌ Performance mode selection cancelled.")
-        return
-    
-    print("\n🔍 Step 4: Testing SMTP connection...")
-    if not email_sender.test_smtp_connection():
-        print("❌ SMTP connection test failed!")
-        return
-    
-    print(f"\n⚙  Step 5: Configuration Summary")  # noqa: F541
-    selected_template = email_sender.email_templates[email_sender.selected_template]
-    print(f"📧 Template: {selected_template['name']}")
-    print(f"⚡ Performance: {email_sender.max_workers} concurrent threads")
-    print(f"⏱  Delay: {email_sender.delay_between_emails}s between emails")
-    
-    if email_sender.selected_template == '1':
-        print(f"🖼  Image: {os.path.basename(conference_image_path)} (Conference)")
-    elif email_sender.selected_template == '2':
-        print(f"🖼  Image: {os.path.basename(abstract_image_path)} (Abstract)")
-    else:
-        print(f"🖼  Image: {os.path.basename(creative_image_path)} (Creative)")
-    
-    print("📧 Sender: admin@phocon2025.com (PHOCON Official)")
-    
-    confirm = input("\n🚀 Start FAST email campaign? (y/n): ").strip().lower()
-    if confirm != 'y':
-        print("❌ Email campaign cancelled.")
-        return
-    
-    print("\n" + "="*70)
-    print("🚀 STARTING FAST PHOCON 2025 EMAIL CAMPAIGN...")
-    print(f"📧 Template: {selected_template['name']}")
-    print(f"⚡ Mode: {email_sender.max_workers} concurrent threads")
-    print("="*70)
-    
-    start_time = datetime.now()
-    print(f"⏰ Started: {start_time.strftime('%H:%M:%S')}")
-    
-    success = email_sender.process_excel_and_send_emails_fast()
-    
-    end_time = datetime.now()
-    duration = end_time - start_time
-    
-    email_sender.generate_report()
-    
-    print(f"\n⏰ Completed: {end_time.strftime('%H:%M:%S')}")
-    print(f"⏱  Total Duration: {duration}")
-    
-    if success:
-        print("\n🎉 FAST PHOCON 2025 EMAIL CAMPAIGN COMPLETED!")
-        print("⚡ Multi-threaded bulk email sending successful!")
-        print("📧 All emails sent from official PHOCON account!")
-    else:
-        print("\n⚠  Campaign completed with some issues.")
-        print("📋 Check the generated reports for details.")
+# ==================== COMMENTED OUT FOR WEB DEPLOYMENT ====================
+# The main() function below is commented out because it's designed for
+# command-line usage with hardcoded Windows file paths. When deploying to
+# Render or other cloud platforms, app.py handles all the file uploads and
+# email sending through the web interface instead.
+# ==========================================================================
 
-if __name__ == "__main__":
-    main()
+# def main():
+#     print("="*70)
+#     print("🚀 PHOCON 2025 FAST BULK EMAIL SENDER")
+#     print("⚡ Multi-threaded • High Performance • Gmail Safe")
+#     print("📧 Email: admin@phocon2025.com")
+#     print("="*70)
+#     
+#     # File paths
+#     excel_path = r"C:\Users\Azad Singh\OneDrive\Desktop\pythone\PHO_List-with email id.xlsx"
+#     conference_image_path = r"C:\Users\Azad Singh\OneDrive\Desktop\pythone\PHOCON  Workshop Creative.jpeg"
+#     abstract_image_path = r"C:\Users\Azad Singh\Downloads\PHOCON Abstract Submission.jpeg"
+#     creative_image_path = r"C:\Users\Azad Singh\OneDrive\Desktop\pythone\Creative.jpeg"
+#     print("\n📁 Step 1: File validation...")
+#     if not os.path.exists(excel_path):
+#         print(f"❌ Excel file not found: {excel_path}")
+#         return
+#     
+#     print(f"✅ Excel file found: {excel_path}")
+#     
+#     if os.path.exists(conference_image_path):
+#         print(f"✅ Conference image found: {os.path.basename(conference_image_path)}")
+#     else:
+#         print(f"⚠  Conference image not found: {os.path.basename(conference_image_path)}")
+#     
+#     if os.path.exists(abstract_image_path):
+#         print(f"✅ Abstract image found: {os.path.basename(abstract_image_path)}")
+#     else:
+#         print(f"⚠  Abstract image not found: {os.path.basename(abstract_image_path)}")
+#     
+#     if os.path.exists(creative_image_path):
+#         print(f"✅ Creative image found: {os.path.basename(creative_image_path)}")
+#     else:
+#         print(f"⚠  Creative image not found: {os.path.basename(creative_image_path)}")
+#     
+#     ## Create email sender instance
+#     email_sender = PHOCONFastEmailSender(excel_path, conference_image_path, abstract_image_path, creative_image_path)
+#     
+#     print("\n📧 Step 2: Select Email Template")
+#     if not email_sender.select_email_template():
+#         print("❌ Template selection cancelled.")
+#         return
+#     
+#     print("\n⚡ Step 3: Select Performance Mode")
+#     if not email_sender.select_performance_mode():
+#         print("❌ Performance mode selection cancelled.")
+#         return
+#     
+#     print("\n🔍 Step 4: Testing SMTP connection...")
+#     if not email_sender.test_smtp_connection():
+#         print("❌ SMTP connection test failed!")
+#         return
+#     
+#     print(f"\n⚙  Step 5: Configuration Summary")
+#     selected_template = email_sender.email_templates[email_sender.selected_template]
+#     print(f"📧 Template: {selected_template['name']}")
+#     print(f"⚡ Performance: {email_sender.max_workers} concurrent threads")
+#     print(f"⏱  Delay: {email_sender.delay_between_emails}s between emails")
+#     
+#     if email_sender.selected_template == '1':
+#         print(f"🖼  Image: {os.path.basename(conference_image_path)} (Conference)")
+#     elif email_sender.selected_template == '2':
+#         print(f"🖼  Image: {os.path.basename(abstract_image_path)} (Abstract)")
+#     else:
+#         print(f"🖼  Image: {os.path.basename(creative_image_path)} (Creative)")
+#     
+#     print("📧 Sender: admin@phocon2025.com (PHOCON Official)")
+#     
+#     confirm = input("\n🚀 Start FAST email campaign? (y/n): ").strip().lower()
+#     if confirm != 'y':
+#         print("❌ Email campaign cancelled.")
+#         return
+#     
+#     print("\n" + "="*70)
+#     print("🚀 STARTING FAST PHOCON 2025 EMAIL CAMPAIGN...")
+#     print(f"📧 Template: {selected_template['name']}")
+#     print(f"⚡ Mode: {email_sender.max_workers} concurrent threads")
+#     print("="*70)
+#     
+#     start_time = datetime.now()
+#     print(f"⏰ Started: {start_time.strftime('%H:%M:%S')}")
+#     
+#     success = email_sender.process_excel_and_send_emails_fast()
+#     
+#     end_time = datetime.now()
+#     duration = end_time - start_time
+#     
+#     email_sender.generate_report()
+#     
+#     print(f"\n⏰ Completed: {end_time.strftime('%H:%M:%S')}")
+#     print(f"⏱  Total Duration: {duration}")
+#     
+#     if success:
+#         print("\n🎉 FAST PHOCON 2025 EMAIL CAMPAIGN COMPLETED!")
+#         print("⚡ Multi-threaded bulk email sending successful!")
+#         print("📧 All emails sent from official PHOCON account!")
+#     else:
+#         print("\n⚠  Campaign completed with some issues.")
+#         print("📋 Check the generated reports for details.")
+
+# if __name__ == "__main__":
+#     main()
