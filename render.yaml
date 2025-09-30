@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: phocon-email-sender
+    name: bulkmail-system
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    startCommand: gunicorn app:app --timeout 300 --workers 2
