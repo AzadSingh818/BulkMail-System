@@ -1,4 +1,3 @@
-from flask.cli import load_dotenv
 import pandas as pd
 import smtplib
 from email.mime.multipart import MIMEMultipart
@@ -10,9 +9,9 @@ from datetime import datetime
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import queue
-from dotenv import load_dotenv  # noqa: F811
-load_dotenv()  # Load environment variables
+from dotenv import load_dotenv  # Only import once from correct module
 
+load_dotenv()  # Load environment variables
 
 class PHOCONFastEmailSender:
     def __init__(self, excel_file_path, conference_image_path, abstract_image_path, creative_image_path):
