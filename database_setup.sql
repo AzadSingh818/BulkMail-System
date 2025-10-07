@@ -1,7 +1,12 @@
--- PHOCON 2025 Database Schema
--- Run this in Neon SQL Editor
+-- PHOCON 2025 Complete Database Schema
+-- Run this in Neon SQL Editor: https://console.neon.tech
 
--- 1. Campaigns Table (Track har campaign)
+-- Drop existing tables if you want to start fresh (CAREFUL!)
+-- DROP TABLE IF EXISTS email_logs CASCADE;
+-- DROP TABLE IF EXISTS campaigns CASCADE;
+-- DROP TABLE IF EXISTS uploaded_files CASCADE;
+
+-- 1. Campaigns Table
 CREATE TABLE IF NOT EXISTS campaigns (
     id SERIAL PRIMARY KEY,
     campaign_name VARCHAR(255) NOT NULL,
@@ -17,7 +22,7 @@ CREATE TABLE IF NOT EXISTS campaigns (
     excel_filename VARCHAR(255)
 );
 
--- 2. Email Logs Table (Har email ki details)
+-- 2. Email Logs Table
 CREATE TABLE IF NOT EXISTS email_logs (
     id SERIAL PRIMARY KEY,
     campaign_id INTEGER REFERENCES campaigns(id) ON DELETE CASCADE,
@@ -31,7 +36,7 @@ CREATE TABLE IF NOT EXISTS email_logs (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 3. Uploaded Files Table (Track files)
+-- 3. Uploaded Files Table
 CREATE TABLE IF NOT EXISTS uploaded_files (
     id SERIAL PRIMARY KEY,
     filename VARCHAR(255) NOT NULL,
@@ -41,14 +46,15 @@ CREATE TABLE IF NOT EXISTS uploaded_files (
     session_id VARCHAR(255)
 );
 
--- Indexes (Fast queries ke liye)
+-- Indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_campaigns_status ON campaigns(status);
 CREATE INDEX IF NOT EXISTS idx_campaigns_created ON campaigns(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_email_logs_campaign ON email_logs(campaign_id);
 CREATE INDEX IF NOT EXISTS idx_email_logs_status ON email_logs(status);
 CREATE INDEX IF NOT EXISTS idx_email_logs_email ON email_logs(recipient_email);
+CREATE INDEX IF NOT EXISTS idx_uploaded_files_session ON uploaded_files(session_id);
 
--- View (Summary ke liye)
+-- View for campaign summary
 CREATE OR REPLACE VIEW campaign_summary AS
 SELECT 
     c.id,
@@ -67,5 +73,6 @@ FROM campaigns c
 LEFT JOIN email_logs el ON c.id = el.campaign_id
 GROUP BY c.id;
 
--- Success message
+-- Verify tables created
 SELECT 'Database setup complete! ✅' as message;
+SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';
