@@ -5,13 +5,34 @@ import secrets
 import pandas as pd
 from datetime import datetime
 import sys
-import psycopg2
-from psycopg2.extras import RealDictCursor
 
-# Add parent directory to path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# FIXED: Add current directory to path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
 
-from phocon_email_sender import PHOCONFastEmailSender
+# Import email sender
+try:
+    from phocon_email_sender import PHOCONFastEmailSender
+except ImportError:
+    # Fallback for different import styles
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "phocon_email_sender", 
+        os.path.join(current_dir, "phocon_email_sender.py")
+    )
+    phocon_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(phocon_module)
+    PHOCONFastEmailSender = phocon_module.PHOCONFastEmailSender
+
+# Database imports
+try:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+    DB_AVAILABLE = True
+except ImportError:
+    print("⚠️ psycopg2 not available - database features disabled")
+    DB_AVAILABLE = False
 
 app = Flask(__name__, template_folder='../templates')
 app.secret_key = os.getenv('SECRET_KEY', secrets.token_hex(16))
@@ -31,7 +52,7 @@ ALLOWED_IMAGES = {'jpg', 'jpeg', 'png'}
 
 def get_db_connection():
     """Database connection banata hai"""
-    if not DATABASE_URL:
+    if not DATABASE_URL or not DB_AVAILABLE:
         return None
     try:
         conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
@@ -42,6 +63,9 @@ def get_db_connection():
 
 def log_to_database(campaign_id, recipient_name, recipient_email, template, status, error_msg=None, thread_id=None):
     """Email status database mein log karta hai"""
+    if not DB_AVAILABLE:
+        return
+    
     conn = get_db_connection()
     if not conn:
         return
@@ -61,6 +85,9 @@ def log_to_database(campaign_id, recipient_name, recipient_email, template, stat
 
 def create_campaign(campaign_name, template_id, performance_mode, total_recipients, excel_filename):
     """Naya campaign database mein create karta hai"""
+    if not DB_AVAILABLE:
+        return None
+    
     conn = get_db_connection()
     if not conn:
         return None
@@ -84,6 +111,9 @@ def create_campaign(campaign_name, template_id, performance_mode, total_recipien
 
 def update_campaign_status(campaign_id, emails_sent, emails_failed, status='completed'):
     """Campaign status update karta hai"""
+    if not DB_AVAILABLE:
+        return
+    
     conn = get_db_connection()
     if not conn or not campaign_id:
         return
@@ -110,6 +140,9 @@ def update_campaign_status(campaign_id, emails_sent, emails_failed, status='comp
 
 def log_file_upload(filename, file_type, file_path, session_id):
     """File upload log karta hai"""
+    if not DB_AVAILABLE:
+        return
+    
     conn = get_db_connection()
     if not conn:
         return
@@ -137,7 +170,7 @@ def index():
 def health():
     """Health check with database status"""
     db_status = "not_configured"
-    if DATABASE_URL:
+    if DATABASE_URL and DB_AVAILABLE:
         conn = get_db_connection()
         if conn:
             db_status = "connected"
@@ -149,6 +182,7 @@ def health():
         'status': 'healthy',
         'platform': 'vercel',
         'database': db_status,
+        'psycopg2_available': DB_AVAILABLE,
         'timestamp': datetime.now().isoformat()
     })
 
@@ -210,6 +244,9 @@ def upload_files():
         })
     
     except Exception as e:
+        print(f"Upload error: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 @app.route('/send_emails', methods=['POST'])
@@ -268,7 +305,7 @@ def send_emails():
         email_sender.max_workers = settings['workers']
         email_sender.delay_between_emails = settings['delay']
         
-        # Send emails
+        # Send emails - CORRECTED FUNCTION NAME
         success = email_sender.process_excel_and_send_emails_fast()
         
         # Collect results
@@ -279,7 +316,6 @@ def send_emails():
         while not email_sender.successful_emails.empty():
             email_data = email_sender.successful_emails.get()
             successful_list.append(email_data)
-            # Log to database
             log_to_database(
                 campaign_id,
                 email_data.get('name'),
@@ -292,7 +328,6 @@ def send_emails():
         while not email_sender.failed_emails.empty():
             email_data = email_sender.failed_emails.get()
             failed_list.append(email_data)
-            # Log to database
             log_to_database(
                 campaign_id,
                 email_data.get('name'),
@@ -306,7 +341,6 @@ def send_emails():
         while not email_sender.skipped_emails.empty():
             email_data = email_sender.skipped_emails.get()
             skipped_list.append(email_data)
-            # Log to database
             log_to_database(
                 campaign_id,
                 email_data.get('name'),
@@ -316,7 +350,7 @@ def send_emails():
                 error_msg=email_data.get('reason')
             )
         
-        # Update campaign status in database
+        # Update campaign status
         update_campaign_status(
             campaign_id,
             len(successful_list),
@@ -393,6 +427,9 @@ def download_report(filename):
 @app.route('/campaigns')
 def get_campaigns():
     """Saari campaigns list karta hai"""
+    if not DB_AVAILABLE:
+        return jsonify({'error': 'Database not available'}), 500
+    
     conn = get_db_connection()
     if not conn:
         return jsonify({'error': 'Database not configured'}), 500
