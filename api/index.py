@@ -13,7 +13,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import queue
 from dotenv import load_dotenv
-import html
 import bleach
 
 load_dotenv()
@@ -514,7 +513,7 @@ class PHOCONFastEmailSender:
             
             # Show all available columns for custom templates
             if self.is_custom_template:
-                print(f"📋 Available variables for custom template:")
+                print("📋 Available variables for custom template:")
                 for col in df.columns:
                     print(f"   {{{{{col}}}}}")
             
