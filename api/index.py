@@ -412,7 +412,7 @@ class PHOCONFastEmailSender:
                 raise Exception("❌ Name or Email column not found in Excel file")
             
             print(f"✅ Found {len(df)} records")
-            print(f"📝 Columns detected:")
+            print("📝 Columns detected:")
             print(f"   Name: {name_col}")
             print(f"   Email (TO): {email_col}")
             if cc_col:
