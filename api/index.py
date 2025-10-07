@@ -112,7 +112,7 @@ def send_emails():
         if not excel_path or not os.path.exists(excel_path):
             return jsonify({'error': 'Excel file not found'}), 400
         
-        # Create email sender
+        # Create email sender mail
         email_sender = PHOCONFastEmailSender(
             excel_path,
             conference_path,
