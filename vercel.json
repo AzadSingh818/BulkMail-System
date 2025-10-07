@@ -11,20 +11,5 @@
       "src": "/(.*)",
       "dest": "api/index.py"
     }
-  ],
-  "functions": {
-    "api/index.py": {
-      "maxDuration": 300,
-      "memory": 3008
-    }
-  },
-  "env": {
-    "SMTP_SERVER": "@smtp_server",
-    "SMTP_PORT": "@smtp_port",
-    "SENDER_EMAIL": "@sender_email",
-    "SENDER_NAME": "@sender_name",
-    "SMTP_USERNAME": "@smtp_username",
-    "SMTP_PASSWORD": "@smtp_password",
-    "SECRET_KEY": "@secret_key"
-  }
+  ]
 }
