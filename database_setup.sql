@@ -122,3 +122,73 @@ SELECT column_name, data_type
 FROM information_schema.columns 
 WHERE table_name = 'email_logs' 
 AND column_name IN ('cc_recipients', 'bcc_recipients');
+
+
+--repeated code
+
+
+
+-- PHOCON 2025 - Custom Email Composer Database Schema
+-- Run this in Neon SQL Editor: https://console.neon.tech
+
+-- 1. Add custom email fields to campaigns table
+ALTER TABLE campaigns 
+ADD COLUMN IF NOT EXISTS custom_subject TEXT,
+ADD COLUMN IF NOT EXISTS custom_body TEXT,
+ADD COLUMN IF NOT EXISTS is_custom_template BOOLEAN DEFAULT FALSE;
+
+-- 2. Create email templates table for saving custom templates
+CREATE TABLE IF NOT EXISTS email_templates (
+    id SERIAL PRIMARY KEY,
+    template_name VARCHAR(255) NOT NULL,
+    subject TEXT NOT NULL,
+    body_html TEXT NOT NULL,
+    created_by VARCHAR(255),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    usage_count INTEGER DEFAULT 0
+);
+
+-- 3. Create indexes
+CREATE INDEX IF NOT EXISTS idx_campaigns_custom ON campaigns(is_custom_template);
+CREATE INDEX IF NOT EXISTS idx_templates_active ON email_templates(is_active);
+CREATE INDEX IF NOT EXISTS idx_templates_created ON email_templates(created_at DESC);
+
+-- 4. Update campaign_summary view
+DROP VIEW IF EXISTS campaign_summary;
+
+CREATE OR REPLACE VIEW campaign_summary AS
+SELECT 
+    c.id,
+    c.campaign_name,
+    c.template_id,
+    c.performance_mode,
+    c.status,
+    c.total_recipients,
+    c.emails_sent,
+    c.emails_failed,
+    c.success_rate,
+    c.created_at,
+    c.completed_at,
+    c.is_custom_template,
+    COUNT(el.id) as total_logs,
+    COUNT(CASE WHEN el.cc_recipients IS NOT NULL AND el.cc_recipients != '' THEN 1 END) as emails_with_cc,
+    COUNT(CASE WHEN el.bcc_recipients IS NOT NULL AND el.bcc_recipients != '' THEN 1 END) as emails_with_bcc
+FROM campaigns c
+LEFT JOIN email_logs el ON c.id = el.campaign_id
+GROUP BY c.id;
+
+-- Verify updates
+SELECT 'Database schema updated with Custom Email Composer support! ✅' as message;
+
+-- Check new columns
+SELECT column_name, data_type 
+FROM information_schema.columns 
+WHERE table_name = 'campaigns' 
+AND column_name IN ('custom_subject', 'custom_body', 'is_custom_template');
+
+SELECT table_name 
+FROM information_schema.tables 
+WHERE table_schema = 'public' 
+AND table_name = 'email_templates';
