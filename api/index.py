@@ -4,26 +4,17 @@ import os
 import secrets
 import pandas as pd
 from datetime import datetime
-import sys
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.image import MIMEImage
+import re
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import queue
+from dotenv import load_dotenv
 
-# FIXED: Add current directory to path
-current_dir = os.path.dirname(os.path.abspath(__file__))
-if current_dir not in sys.path:
-    sys.path.insert(0, current_dir)
-
-# Import email sender
-try:
-    from phocon_email_sender import PHOCONFastEmailSender
-except ImportError:
-    # Fallback for different import styles
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        "phocon_email_sender", 
-        os.path.join(current_dir, "phocon_email_sender.py")
-    )
-    phocon_module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(phocon_module)
-    PHOCONFastEmailSender = phocon_module.PHOCONFastEmailSender
+load_dotenv()
 
 # Database imports
 try:
@@ -34,17 +25,402 @@ except ImportError:
     print("⚠️ psycopg2 not available - database features disabled")
     DB_AVAILABLE = False
 
+# ==================== EMAIL SENDER CLASS ====================
+class PHOCONFastEmailSender:
+    def __init__(self, excel_file_path, conference_image_path, abstract_image_path, creative_image_path):
+        self.excel_file_path = excel_file_path
+        self.conference_image_path = conference_image_path
+        self.abstract_image_path = abstract_image_path
+        self.creative_image_path = creative_image_path
+        
+        # Gmail SMTP Configuration from environment variables
+        self.smtp_config = {
+            'smtp_server': os.getenv('SMTP_SERVER', 'smtp.gmail.com'),
+            'smtp_port': int(os.getenv('SMTP_PORT', 587)),
+            'sender_email': os.getenv('SENDER_EMAIL'),
+            'sender_name': os.getenv('SENDER_NAME', 'PHOCON 2025 Team'),
+            'username': os.getenv('SMTP_USERNAME'),
+            'password': os.getenv('SMTP_PASSWORD'),
+            'service': 'gmail',
+            'security': 'starttls',
+            'encryption': 'TLS',
+            'use_tls': True
+        }
+        
+        # Email templates
+        self.email_templates = {
+            '1': {
+                'name': 'Conference Invitation Email',
+                'description': 'Main conference invitation with workshop details'
+            },
+            '2': {
+                'name': 'Abstract Submission Reminder',
+                'description': 'Last call for abstract submission (10 days left)'
+            },
+            '3': {
+                'name': 'Final Abstract Submission Reminder',
+                'description': 'Final reminder for abstract submission (3 days left)'
+            }
+        }
+        
+        # Thread-safe counters
+        self.successful_emails = queue.Queue()
+        self.failed_emails = queue.Queue()
+        self.skipped_emails = queue.Queue()
+        self.selected_template = None
+        
+        # Performance settings
+        self.max_workers = 5
+        self.batch_size = 50
+        self.delay_between_emails = 0.1
+    
+    def validate_email(self, email):
+        """Email format validate karta hai"""
+        pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        return re.match(pattern, email) is not None
+    
+    def extract_emails_from_cell(self, cell_value):
+        """Cell se multiple emails extract karta hai"""
+        if pd.isna(cell_value) or str(cell_value).strip() == '':
+            return []
+        
+        cell_str = str(cell_value).strip()
+        emails = re.split(r'[,;\s\n]+', cell_str)
+        
+        valid_emails = []
+        for email in emails:
+            email = email.strip()
+            if email and self.validate_email(email):
+                valid_emails.append(email)
+        
+        return valid_emails
+
+    def create_conference_invitation_email(self, doctor_name):
+        """Template 1: Conference invitation email content"""
+        subject = "PHOCON 2025 | Meet our Esteemed International Faculty"
+    
+        body = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+    
+        <p style="font-size: 16px;"><strong>Dear {doctor_name}</strong></p>
+    
+        <p style="font-size: 14px;">Join us at the <strong>28th Annual Pediatric Hematology Oncology Conference</strong> as <strong>Dr. Michele P Lambert</strong> shares insights on <strong>Immune Thrombocytopenia (ITP)</strong>.</p>
+    
+        <div style="background-color: #f8f9fa; padding: 15px; border-left: 4px solid #007bff; margin: 20px 0;">
+        <p style="margin: 0; font-size: 14px;"><strong>📅 Date:</strong> 28th – 30th November 2025</p>
+        <p style="margin: 0; font-size: 14px;"><strong>📍 Venue:</strong> Dr TMA Pai Halls, KMC, Manipal</p>
+        </div>
+    
+        <div style="text-align: center; margin: 25px 0;">
+        <a href="https://followmyevent.com/phocon-2025/" style="background-color: #007bff; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-size: 16px; font-weight: bold;">
+        👉 Secure your spot today!
+        </a>
+        </div>
+    
+        <p style="font-size: 14px;"><strong>For Queries:</strong> +91 63646 90353</p>
+    
+        <div style="text-align: center; margin: 20px 0;">
+        <img src="cid:phocon_conference_image" style="max-width: 100%; height: auto; border-radius: 8px;" alt="PHOCON Conference Invitation">
+        </div>
+    
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
+        <p style="font-size: 14px; margin: 0;">Warm Regards,</p>
+        <p style="font-size: 14px; margin: 0;"><strong>Team PHOCON 2025</strong></p>
+        </div>
+    
+        </div>
+        </body>
+        </html>
+        """
+        return subject, body
+    
+    def create_mahanavami_offer_email(self, doctor_name):
+        """Template 2: Mahanavami special offer email content"""
+        subject = "Special Mahanavami Offer – Exclusive Discounts on PHOCON 2025 Workshops!"
+
+        body = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+
+        <p style="font-size: 16px;"><strong>Dear {doctor_name}</strong></p>
+
+        <div style="background-color: #ff6b6b; color: white; padding: 15px; text-align: center; border-radius: 8px; margin: 20px 0;">
+        <h2 style="margin: 0; font-size: 24px;">🎉 Celebrate Mahanavami!</h2>
+        <p style="margin: 5px 0 0 0; font-size: 16px;">Exclusive Discounted Rates on PHOCON 2025 Workshops</p>
+        </div>
+
+        <div style="background-color: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 20px 0;">
+        <p style="margin: 0; font-size: 14px;"><strong>⏰ Offer Valid:</strong> Only on 1st & 2nd October</p>
+        <p style="margin: 5px 0 0 0; font-size: 14px; color: #856404;"><strong>Don't miss it!</strong></p>
+        </div>
+
+        <div style="text-align: center; margin: 30px 0;">
+        <a href="https://followmyevent.com/phocon-2025/" style="background-color: #28a745; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-size: 18px; font-weight: bold; display: inline-block;">
+        🚀 REGISTER NOW
+        </a>
+        </div>
+
+        <div style="text-align: center; margin: 20px 0;">
+        <img src="cid:phocon_abstract_image" style="max-width: 100%; height: auto; border-radius: 8px;" alt="PHOCON Mahanavami Offer">
+        </div>
+
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
+        <p style="font-size: 14px; margin: 0;">Warm Regards,</p>
+        <p style="font-size: 14px; margin: 0;"><strong>Team PHOCON 2025</strong></p>
+        </div>
+
+        </div>
+        </body>
+        </html>
+        """
+
+        return subject, body
+
+    def create_final_abstract_reminder_email(self, doctor_name):
+        """Template 3: Final reminder"""
+        subject = "⏳ Final Reminder: Abstract Submission Closes 14th Sept!"
+        
+        body = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+        
+        <p style="font-size: 16px;"><strong>Dear {doctor_name},</strong></p>
+        
+        <div style="background-color: #dc3545; color: white; padding: 15px; text-align: center; border-radius: 8px; margin: 20px 0;">
+        <h2 style="margin: 0; font-size: 24px;">🚨 Final Reminder! 🚨</h2>
+        </div>
+        
+        <p style="font-size: 14px;">📅 Deadline: 14th Sept 2025 (Midnight)</p>
+        
+        <div style="text-align: center; margin: 30px 0;">
+        <a href="https://phocon-conference-system.vercel.app/" style="background-color: #007bff; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-size: 18px; font-weight: bold; display: inline-block;">
+        🚀 REGISTER NOW
+        </a>
+        </div>
+        
+        <div style="text-align: center; margin: 20px 0;">
+        <img src="cid:phocon_creative_image" style="max-width: 100%; height: auto; border-radius: 8px;" alt="PHOCON Creative">
+        </div>
+        
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
+        <p style="font-size: 14px; margin: 0;">Warm regards,</p>
+        <p style="font-size: 14px; margin: 0;"><strong>Team PHOCON 2025</strong></p>
+        </div>
+        
+        </div>
+        </body>
+        </html>
+        """
+        
+        return subject, body
+    
+    def create_email_content(self, doctor_name):
+        """Selected template ke basis pe email content create karta hai"""
+        if self.selected_template == '1':
+            return self.create_conference_invitation_email(doctor_name)
+        elif self.selected_template == '2':
+            return self.create_mahanavami_offer_email(doctor_name)
+        elif self.selected_template == '3':
+            return self.create_final_abstract_reminder_email(doctor_name)
+        else:
+            raise Exception("❌ No template selected!")
+    
+    def create_smtp_connection(self):
+        """New SMTP connection create karta hai (thread-safe)"""
+        try:
+            server = smtplib.SMTP(self.smtp_config['smtp_server'], self.smtp_config['smtp_port'], timeout=30)
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(self.smtp_config['username'], self.smtp_config['password'])
+            return server
+        except Exception as e:
+            raise Exception(f"SMTP connection failed: {str(e)}")
+    
+    def send_single_email(self, email_data):
+        """Single email send karta hai (thread-safe)"""
+        recipient_email, doctor_name, thread_id = email_data
+        
+        try:
+            server = self.create_smtp_connection()
+            msg = self.create_message(recipient_email, doctor_name)
+            text = msg.as_string()
+            server.sendmail(self.smtp_config['sender_email'], recipient_email, text)
+            server.quit()
+            
+            success_data = {
+                'name': doctor_name,
+                'email': recipient_email,
+                'template': self.email_templates[self.selected_template]['name'],
+                'thread_id': thread_id
+            }
+            self.successful_emails.put(success_data)
+            
+            return True, f"✅ [Thread-{thread_id}] Email sent to {doctor_name} ({recipient_email})"
+            
+        except Exception as e:
+            error_data = {
+                'name': doctor_name,
+                'email': recipient_email,
+                'reason': str(e),
+                'template': self.email_templates[self.selected_template]['name'],
+                'thread_id': thread_id
+            }
+            self.failed_emails.put(error_data)
+            
+            return False, f"❌ [Thread-{thread_id}] Failed to send to {doctor_name} ({recipient_email}): {str(e)}"
+    
+    def create_message(self, recipient_email, doctor_name):
+        """Email message create karta hai"""
+        msg = MIMEMultipart('related')
+        msg['From'] = f"{self.smtp_config['sender_name']} <{self.smtp_config['sender_email']}>"
+        msg['To'] = recipient_email
+        
+        subject, body = self.create_email_content(doctor_name)
+        msg['Subject'] = subject
+        
+        msg.attach(MIMEText(body, 'html'))
+        
+        # Template ke basis pe different images attach karte hain
+        if self.selected_template == '1':
+            if os.path.exists(self.conference_image_path):
+                try:
+                    with open(self.conference_image_path, 'rb') as attachment:
+                        img = MIMEImage(attachment.read())
+                        img.add_header('Content-ID', '<phocon_conference_image>')
+                        img.add_header('Content-Disposition', 'inline', 
+                                     filename=os.path.basename(self.conference_image_path))
+                        msg.attach(img)
+                except Exception:
+                    pass
+        
+        elif self.selected_template == '2':
+            if os.path.exists(self.abstract_image_path):
+                try:
+                    with open(self.abstract_image_path, 'rb') as attachment:
+                        img = MIMEImage(attachment.read())
+                        img.add_header('Content-ID', '<phocon_abstract_image>')
+                        img.add_header('Content-Disposition', 'inline', 
+                                     filename=os.path.basename(self.abstract_image_path))
+                        msg.attach(img)
+                except Exception:
+                    pass
+        
+        elif self.selected_template == '3':
+            if os.path.exists(self.creative_image_path):
+                try:
+                    with open(self.creative_image_path, 'rb') as attachment:
+                        img = MIMEImage(attachment.read())
+                        img.add_header('Content-ID', '<phocon_creative_image>')
+                        img.add_header('Content-Disposition', 'inline', 
+                                     filename=os.path.basename(self.creative_image_path))
+                        msg.attach(img)
+                except Exception:
+                    pass
+        
+        return msg
+    
+    def process_excel_and_send_emails_fast(self):
+        """Excel file process karta hai aur emails send karta hai (FAST VERSION)"""
+        try:
+            print(f"📁 Reading Excel file: {self.excel_file_path}")
+            df = pd.read_excel(self.excel_file_path)
+            
+            df.columns = df.columns.str.lower().str.strip()
+            
+            name_col = None
+            email_col = None
+            
+            for col in df.columns:
+                if 'name' in col:
+                    name_col = col
+                if 'email' in col or 'mail' in col:
+                    email_col = col
+            
+            if name_col is None or email_col is None:
+                raise Exception("❌ Name or Email column not found in Excel file")
+            
+            print(f"✅ Found {len(df)} records")
+            print(f"📝 Name column: {name_col}")
+            print(f"📧 Email column: {email_col}")
+            
+            template_name = self.email_templates[self.selected_template]['name']
+            print(f"📧 Using Template: {template_name}")
+            print(f"⚡ Performance: {self.max_workers} concurrent threads")
+            print("-" * 60)
+            
+            # Prepare email list
+            email_tasks = []
+            thread_counter = 0
+            
+            for index, row in df.iterrows():
+                doctor_name = str(row[name_col]).strip() if pd.notna(row[name_col]) else f"Doctor_{index+1}"
+                email_cell = row[email_col]
+                
+                emails = self.extract_emails_from_cell(email_cell)
+                
+                if not emails:
+                    skip_data = {
+                        'name': doctor_name,
+                        'email': str(email_cell),
+                        'reason': 'No valid email found'
+                    }
+                    self.skipped_emails.put(skip_data)
+                    continue
+                
+                for email in emails:
+                    thread_counter += 1
+                    email_tasks.append((email, doctor_name, thread_counter))
+            
+            total_emails = len(email_tasks)
+            print(f"🚀 Ready to send {total_emails} emails using {self.max_workers} threads...")
+            
+            # Process emails with ThreadPoolExecutor
+            completed = 0
+            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                future_to_email = {executor.submit(self.send_single_email, task): task for task in email_tasks}
+                
+                for future in as_completed(future_to_email):
+                    completed += 1
+                    email_data = future_to_email[future]
+                    recipient_email, doctor_name, thread_id = email_data
+                    
+                    try:
+                        success, message = future.result()
+                        print(f"[{completed}/{total_emails}] {message}")
+                        
+                        if self.delay_between_emails > 0:
+                            time.sleep(self.delay_between_emails)
+                            
+                    except Exception as e:
+                        print(f"[{completed}/{total_emails}] ❌ [Thread-{thread_id}] Exception: {str(e)}")
+                    
+                    if completed % 10 == 0:
+                        progress = (completed/total_emails)*100
+                        print(f"📊 Progress: {progress:.1f}% ({completed}/{total_emails})")
+            
+            print(f"✅ All {total_emails} email tasks completed!")
+            
+        except Exception as e:
+            print(f"❌ Error processing Excel file: {str(e)}")
+            return False
+        
+        return True
+
+# ==================== FLASK APP ====================
 app = Flask(__name__, template_folder='../templates')
 app.secret_key = os.getenv('SECRET_KEY', secrets.token_hex(16))
 
-# Use /tmp for Vercel
 UPLOAD_FOLDER = '/tmp/uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
-# Database configuration
 DATABASE_URL = os.getenv('DATABASE_URL')
 
 ALLOWED_EXTENSIONS = {'xlsx', 'xls'}
@@ -305,7 +681,7 @@ def send_emails():
         email_sender.max_workers = settings['workers']
         email_sender.delay_between_emails = settings['delay']
         
-        # Send emails - CORRECTED FUNCTION NAME
+        # Send emails
         success = email_sender.process_excel_and_send_emails_fast()
         
         # Collect results
