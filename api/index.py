@@ -25,7 +25,7 @@ except ImportError:
     print("⚠️ psycopg2 not available - database features disabled")
     DB_AVAILABLE = False
 
-# ==================== EMAIL SENDER CLASS ====================
+# ==================== EMAIL SENDER CLASS WITH CC/BCC ====================
 class PHOCONFastEmailSender:
     def __init__(self, excel_file_path, conference_image_path, abstract_image_path, creative_image_path):
         self.excel_file_path = excel_file_path
@@ -80,12 +80,13 @@ class PHOCONFastEmailSender:
         return re.match(pattern, email) is not None
     
     def extract_emails_from_cell(self, cell_value):
-        """Cell se multiple emails extract karta hai"""
+        """Cell se multiple emails extract karta hai (comma/semicolon/newline separated)"""
         if pd.isna(cell_value) or str(cell_value).strip() == '':
             return []
         
         cell_str = str(cell_value).strip()
-        emails = re.split(r'[,;\s\n]+', cell_str)
+        # Split by comma, semicolon, or newline
+        emails = re.split(r'[,;\n]+', cell_str)
         
         valid_emails = []
         for email in emails:
@@ -241,140 +242,224 @@ class PHOCONFastEmailSender:
         except Exception as e:
             raise Exception(f"SMTP connection failed: {str(e)}")
     
-    def send_single_email(self, email_data):
-        """Single email send karta hai (thread-safe)"""
-        recipient_email, doctor_name, thread_id = email_data
+    def create_message_with_cc_bcc(self, recipient_email, doctor_name, cc_emails=None, bcc_emails=None):
+        """
+        Email message create karta hai with CC and BCC support
+        
+        Args:
+            recipient_email: Primary recipient (TO)
+            doctor_name: Name for personalization
+            cc_emails: List of CC email addresses (visible to all)
+            bcc_emails: List of BCC email addresses (hidden from recipients)
+        """
+        msg = MIMEMultipart('related')
+        
+        # From header
+        msg['From'] = f"{self.smtp_config['sender_name']} <{self.smtp_config['sender_email']}>"
+        
+        # To header (primary recipient)
+        msg['To'] = recipient_email
+        
+        # CC header (visible to all recipients)
+        if cc_emails and len(cc_emails) > 0:
+            msg['Cc'] = ', '.join(cc_emails)
+        
+        # NOTE: BCC is NOT added to headers (that's the point - it's blind/hidden)
+        # BCC addresses will be included in sendmail() recipient list only
+        
+        # Get email subject and body
+        subject, body = self.create_email_content(doctor_name)
+        msg['Subject'] = subject
+        
+        # Attach HTML body
+        msg.attach(MIMEText(body, 'html'))
+        
+        # Attach template-specific image
+        self._attach_template_image(msg)
+        
+        return msg
+    
+    def _attach_template_image(self, msg):
+        """Template ke basis pe appropriate image attach karta hai"""
+        if self.selected_template == '1' and os.path.exists(self.conference_image_path):
+            try:
+                with open(self.conference_image_path, 'rb') as f:
+                    img = MIMEImage(f.read())
+                    img.add_header('Content-ID', '<phocon_conference_image>')
+                    img.add_header('Content-Disposition', 'inline', 
+                                 filename=os.path.basename(self.conference_image_path))
+                    msg.attach(img)
+            except Exception:
+                pass  # Continue without image if error
+        
+        elif self.selected_template == '2' and os.path.exists(self.abstract_image_path):
+            try:
+                with open(self.abstract_image_path, 'rb') as f:
+                    img = MIMEImage(f.read())
+                    img.add_header('Content-ID', '<phocon_abstract_image>')
+                    img.add_header('Content-Disposition', 'inline', 
+                                 filename=os.path.basename(self.abstract_image_path))
+                    msg.attach(img)
+            except Exception:
+                pass
+        
+        elif self.selected_template == '3' and os.path.exists(self.creative_image_path):
+            try:
+                with open(self.creative_image_path, 'rb') as f:
+                    img = MIMEImage(f.read())
+                    img.add_header('Content-ID', '<phocon_creative_image>')
+                    img.add_header('Content-Disposition', 'inline', 
+                                 filename=os.path.basename(self.creative_image_path))
+                    msg.attach(img)
+            except Exception:
+                pass
+    
+    def send_single_email_with_cc_bcc(self, email_data):
+        """
+        Single email send karta hai with CC/BCC support (thread-safe)
+        
+        Args:
+            email_data: Tuple of (to_email, name, cc_list, bcc_list, thread_id)
+        """
+        recipient_email, doctor_name, cc_emails, bcc_emails, thread_id = email_data
         
         try:
+            # Create SMTP connection
             server = self.create_smtp_connection()
-            msg = self.create_message(recipient_email, doctor_name)
-            text = msg.as_string()
-            server.sendmail(self.smtp_config['sender_email'], recipient_email, text)
+            
+            # Create message with CC/BCC
+            msg = self.create_message_with_cc_bcc(recipient_email, doctor_name, cc_emails, bcc_emails)
+            
+            # Build complete recipient list for SMTP delivery
+            # SMTP needs ALL recipients (TO + CC + BCC) in the sendmail() call
+            all_recipients = [recipient_email]
+            if cc_emails:
+                all_recipients.extend(cc_emails)
+            if bcc_emails:
+                all_recipients.extend(bcc_emails)
+            
+            # Send email to ALL recipients
+            # IMPORTANT: Only TO and CC appear in email headers
+            # BCC recipients get the email but are hidden from others
+            server.sendmail(
+                self.smtp_config['sender_email'],
+                all_recipients,  # TO + CC + BCC
+                msg.as_string()
+            )
             server.quit()
             
+            # Log success with CC/BCC info
             success_data = {
                 'name': doctor_name,
                 'email': recipient_email,
+                'cc': ', '.join(cc_emails) if cc_emails else '',
+                'bcc': ', '.join(bcc_emails) if bcc_emails else '',
                 'template': self.email_templates[self.selected_template]['name'],
                 'thread_id': thread_id
             }
             self.successful_emails.put(success_data)
             
-            return True, f"✅ [Thread-{thread_id}] Email sent to {doctor_name} ({recipient_email})"
+            # Build log message
+            cc_info = f" + CC({len(cc_emails)})" if cc_emails else ""
+            bcc_info = f" + BCC({len(bcc_emails)})" if bcc_emails else ""
+            return True, f"✅ [Thread-{thread_id}] Email sent to {doctor_name}{cc_info}{bcc_info}"
             
         except Exception as e:
+            # Log failure with CC/BCC info
             error_data = {
                 'name': doctor_name,
                 'email': recipient_email,
+                'cc': ', '.join(cc_emails) if cc_emails else '',
+                'bcc': ', '.join(bcc_emails) if bcc_emails else '',
                 'reason': str(e),
                 'template': self.email_templates[self.selected_template]['name'],
                 'thread_id': thread_id
             }
             self.failed_emails.put(error_data)
             
-            return False, f"❌ [Thread-{thread_id}] Failed to send to {doctor_name} ({recipient_email}): {str(e)}"
-    
-    def create_message(self, recipient_email, doctor_name):
-        """Email message create karta hai"""
-        msg = MIMEMultipart('related')
-        msg['From'] = f"{self.smtp_config['sender_name']} <{self.smtp_config['sender_email']}>"
-        msg['To'] = recipient_email
-        
-        subject, body = self.create_email_content(doctor_name)
-        msg['Subject'] = subject
-        
-        msg.attach(MIMEText(body, 'html'))
-        
-        # Template ke basis pe different images attach karte hain
-        if self.selected_template == '1':
-            if os.path.exists(self.conference_image_path):
-                try:
-                    with open(self.conference_image_path, 'rb') as attachment:
-                        img = MIMEImage(attachment.read())
-                        img.add_header('Content-ID', '<phocon_conference_image>')
-                        img.add_header('Content-Disposition', 'inline', 
-                                     filename=os.path.basename(self.conference_image_path))
-                        msg.attach(img)
-                except Exception:
-                    pass
-        
-        elif self.selected_template == '2':
-            if os.path.exists(self.abstract_image_path):
-                try:
-                    with open(self.abstract_image_path, 'rb') as attachment:
-                        img = MIMEImage(attachment.read())
-                        img.add_header('Content-ID', '<phocon_abstract_image>')
-                        img.add_header('Content-Disposition', 'inline', 
-                                     filename=os.path.basename(self.abstract_image_path))
-                        msg.attach(img)
-                except Exception:
-                    pass
-        
-        elif self.selected_template == '3':
-            if os.path.exists(self.creative_image_path):
-                try:
-                    with open(self.creative_image_path, 'rb') as attachment:
-                        img = MIMEImage(attachment.read())
-                        img.add_header('Content-ID', '<phocon_creative_image>')
-                        img.add_header('Content-Disposition', 'inline', 
-                                     filename=os.path.basename(self.creative_image_path))
-                        msg.attach(img)
-                except Exception:
-                    pass
-        
-        return msg
+            return False, f"❌ [Thread-{thread_id}] Failed: {doctor_name} - {str(e)}"
     
     def process_excel_and_send_emails_fast(self):
-        """Excel file process karta hai aur emails send karta hai (FAST VERSION)"""
+        """Excel file process karta hai with CC/BCC support aur emails send karta hai"""
         try:
             print(f"📁 Reading Excel file: {self.excel_file_path}")
             df = pd.read_excel(self.excel_file_path)
             
+            # Normalize column names (lowercase, trim spaces)
             df.columns = df.columns.str.lower().str.strip()
             
+            # Find required columns
             name_col = None
             email_col = None
+            cc_col = None
+            bcc_col = None
             
             for col in df.columns:
-                if 'name' in col:
+                col_lower = col.lower()
+                if 'name' in col_lower:
                     name_col = col
-                if 'email' in col or 'mail' in col:
+                # Email column (but not CC or BCC)
+                if ('email' in col_lower or 'mail' in col_lower) and 'cc' not in col_lower and 'bcc' not in col_lower:
                     email_col = col
+                # CC column
+                if 'cc' in col_lower and 'bcc' not in col_lower:
+                    cc_col = col
+                # BCC column
+                if 'bcc' in col_lower:
+                    bcc_col = col
             
             if name_col is None or email_col is None:
                 raise Exception("❌ Name or Email column not found in Excel file")
             
             print(f"✅ Found {len(df)} records")
-            print(f"📝 Name column: {name_col}")
-            print(f"📧 Email column: {email_col}")
+            print(f"📝 Columns detected:")
+            print(f"   Name: {name_col}")
+            print(f"   Email (TO): {email_col}")
+            if cc_col:
+                print(f"   CC: {cc_col}")
+            if bcc_col:
+                print(f"   BCC: {bcc_col}")
             
             template_name = self.email_templates[self.selected_template]['name']
             print(f"📧 Using Template: {template_name}")
             print(f"⚡ Performance: {self.max_workers} concurrent threads")
             print("-" * 60)
             
-            # Prepare email list
+            # Prepare email tasks
             email_tasks = []
             thread_counter = 0
             
             for index, row in df.iterrows():
+                # Extract name
                 doctor_name = str(row[name_col]).strip() if pd.notna(row[name_col]) else f"Doctor_{index+1}"
-                email_cell = row[email_col]
                 
-                emails = self.extract_emails_from_cell(email_cell)
+                # Extract TO email(s)
+                to_emails = self.extract_emails_from_cell(row[email_col])
                 
-                if not emails:
-                    skip_data = {
+                # Extract CC email(s)
+                cc_emails = []
+                if cc_col and cc_col in row:
+                    cc_emails = self.extract_emails_from_cell(row[cc_col])
+                
+                # Extract BCC email(s)
+                bcc_emails = []
+                if bcc_col and bcc_col in row:
+                    bcc_emails = self.extract_emails_from_cell(row[bcc_col])
+                
+                # Skip if no valid TO email
+                if not to_emails:
+                    self.skipped_emails.put({
                         'name': doctor_name,
-                        'email': str(email_cell),
-                        'reason': 'No valid email found'
-                    }
-                    self.skipped_emails.put(skip_data)
+                        'email': str(row[email_col]),
+                        'reason': 'No valid TO email found'
+                    })
                     continue
                 
-                for email in emails:
+                # Create task for each TO email
+                # (CC and BCC are shared across all TO emails from same row)
+                for to_email in to_emails:
                     thread_counter += 1
-                    email_tasks.append((email, doctor_name, thread_counter))
+                    email_tasks.append((to_email, doctor_name, cc_emails, bcc_emails, thread_counter))
             
             total_emails = len(email_tasks)
             print(f"🚀 Ready to send {total_emails} emails using {self.max_workers} threads...")
@@ -382,34 +467,34 @@ class PHOCONFastEmailSender:
             # Process emails with ThreadPoolExecutor
             completed = 0
             with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-                future_to_email = {executor.submit(self.send_single_email, task): task for task in email_tasks}
+                future_to_email = {
+                    executor.submit(self.send_single_email_with_cc_bcc, task): task 
+                    for task in email_tasks
+                }
                 
                 for future in as_completed(future_to_email):
                     completed += 1
-                    email_data = future_to_email[future]
-                    recipient_email, doctor_name, thread_id = email_data
-                    
                     try:
                         success, message = future.result()
                         print(f"[{completed}/{total_emails}] {message}")
                         
+                        # Small delay to avoid overwhelming SMTP server
                         if self.delay_between_emails > 0:
                             time.sleep(self.delay_between_emails)
-                            
                     except Exception as e:
-                        print(f"[{completed}/{total_emails}] ❌ [Thread-{thread_id}] Exception: {str(e)}")
+                        print(f"[{completed}/{total_emails}] ❌ Exception: {str(e)}")
                     
+                    # Progress update every 10 emails
                     if completed % 10 == 0:
                         progress = (completed/total_emails)*100
                         print(f"📊 Progress: {progress:.1f}% ({completed}/{total_emails})")
             
             print(f"✅ All {total_emails} email tasks completed!")
+            return True
             
         except Exception as e:
             print(f"❌ Error processing Excel file: {str(e)}")
             return False
-        
-        return True
 
 # ==================== FLASK APP ====================
 app = Flask(__name__, template_folder='../templates')
@@ -437,8 +522,22 @@ def get_db_connection():
         print(f"Database connection error: {e}")
         return None
 
-def log_to_database(campaign_id, recipient_name, recipient_email, template, status, error_msg=None, thread_id=None):
-    """Email status database mein log karta hai"""
+def log_to_database(campaign_id, recipient_name, recipient_email, template, status, 
+                    error_msg=None, thread_id=None, cc_recipients=None, bcc_recipients=None):
+    """
+    Email status database mein log karta hai with CC/BCC support
+    
+    Args:
+        campaign_id: Campaign ID
+        recipient_name: Recipient name
+        recipient_email: Primary email (TO)
+        template: Template ID used
+        status: 'sent', 'failed', or 'skipped'
+        error_msg: Error message if failed
+        thread_id: Thread ID for tracking
+        cc_recipients: Comma-separated CC emails
+        bcc_recipients: Comma-separated BCC emails
+    """
     if not DB_AVAILABLE:
         return
     
@@ -450,9 +549,11 @@ def log_to_database(campaign_id, recipient_name, recipient_email, template, stat
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO email_logs 
-            (campaign_id, recipient_name, recipient_email, template_used, status, error_message, thread_id, sent_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
-        """, (campaign_id, recipient_name, recipient_email, template, status, error_msg, thread_id))
+            (campaign_id, recipient_name, recipient_email, template_used, status, 
+             error_message, thread_id, cc_recipients, bcc_recipients, sent_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+        """, (campaign_id, recipient_name, recipient_email, template, status, 
+              error_msg, thread_id, cc_recipients, bcc_recipients))
         conn.commit()
         cursor.close()
         conn.close()
@@ -684,7 +785,7 @@ def send_emails():
         # Send emails
         success = email_sender.process_excel_and_send_emails_fast()
         
-        # Collect results
+        # Collect results with CC/BCC logging
         successful_list = []
         failed_list = []
         skipped_list = []
@@ -698,7 +799,9 @@ def send_emails():
                 email_data.get('email'),
                 template,
                 'sent',
-                thread_id=email_data.get('thread_id')
+                thread_id=email_data.get('thread_id'),
+                cc_recipients=email_data.get('cc'),  # NEW: Log CC
+                bcc_recipients=email_data.get('bcc')  # NEW: Log BCC
             )
         
         while not email_sender.failed_emails.empty():
@@ -711,7 +814,9 @@ def send_emails():
                 template,
                 'failed',
                 error_msg=email_data.get('reason'),
-                thread_id=email_data.get('thread_id')
+                thread_id=email_data.get('thread_id'),
+                cc_recipients=email_data.get('cc'),  # NEW: Log CC
+                bcc_recipients=email_data.get('bcc')  # NEW: Log BCC
             )
             
         while not email_sender.skipped_emails.empty():
@@ -798,6 +903,78 @@ def download_report(filename):
     
     except Exception as e:
         print(f"Download error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/download_template')
+def download_template():
+    """Sample Excel template with CC/BCC columns download karta hai"""
+    try:
+        # Create sample DataFrame with CC/BCC examples
+        sample_data = {
+            'Name': [
+                'Dr. Azad Singh', 
+                'Dr. Aman Kumar', 
+                'Dr. Priya Shah',
+                'Dr. Rajesh Verma'
+            ],
+            'Email': [
+                'azad@hospital.com', 
+                'aman@kmc.edu', 
+                'priya@aiims.in',
+                'rajesh@sgpgi.ac.in'
+            ],
+            'CC': [
+                'secretary@hospital.com', 
+                'head@kmc.edu; dept@kmc.edu', 
+                '',
+                'team@sgpgi.ac.in'
+            ],
+            'BCC': [
+                'admin@phocon2025.com', 
+                '', 
+                'tracking@phocon2025.com',
+                'admin@phocon2025.com; analytics@phocon2025.com'
+            ]
+        }
+        
+        df = pd.DataFrame(sample_data)
+        
+        # Add instructions as a second sheet
+        instructions_data = {
+            'Column': ['Name', 'Email', 'CC', 'BCC'],
+            'Required': ['Yes', 'Yes', 'No', 'No'],
+            'Description': [
+                'Recipient name for personalization',
+                'Primary recipient email (TO field)',
+                'Carbon copy - visible to all recipients (separate multiple with semicolon)',
+                'Blind carbon copy - hidden from other recipients (separate multiple with semicolon)'
+            ],
+            'Example': [
+                'Dr. John Doe',
+                'john@hospital.com',
+                'secretary@hospital.com; assistant@hospital.com',
+                'admin@phocon2025.com'
+            ]
+        }
+        
+        instructions_df = pd.DataFrame(instructions_data)
+        
+        # Create Excel file with multiple sheets
+        template_path = os.path.join(app.config['UPLOAD_FOLDER'], 'PHOCON_2025_Template.xlsx')
+        
+        with pd.ExcelWriter(template_path, engine='openpyxl') as writer:
+            df.to_excel(writer, sheet_name='Recipients', index=False)
+            instructions_df.to_excel(writer, sheet_name='Instructions', index=False)
+        
+        return send_file(
+            template_path,
+            as_attachment=True,
+            download_name='PHOCON_2025_Recipients_Template.xlsx',
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+    
+    except Exception as e:
+        print(f"Template download error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/campaigns')

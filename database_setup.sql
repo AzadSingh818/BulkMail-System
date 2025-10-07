@@ -33,7 +33,9 @@ CREATE TABLE IF NOT EXISTS email_logs (
     error_message TEXT,
     sent_at TIMESTAMP,
     thread_id INTEGER,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    cc_recipients TEXT,
+    bcc_recipients TEXT
 );
 
 -- 3. Uploaded Files Table
@@ -76,3 +78,47 @@ GROUP BY c.id;
 -- Verify tables created
 SELECT 'Database setup complete! ✅' as message;
 SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';
+
+-- PHOCON 2025 Database Schema Update for CC/BCC Support
+-- Run this in Neon SQL Editor: https://console.neon.tech
+
+-- Add CC/BCC columns to email_logs table
+ALTER TABLE email_logs 
+ADD COLUMN IF NOT EXISTS cc_recipients TEXT,
+ADD COLUMN IF NOT EXISTS bcc_recipients TEXT;
+
+-- Create index for CC/BCC searches
+CREATE INDEX IF NOT EXISTS idx_email_logs_cc ON email_logs(cc_recipients);
+CREATE INDEX IF NOT EXISTS idx_email_logs_bcc ON email_logs(bcc_recipients);
+
+-- Update the campaign_summary view to include CC/BCC stats
+DROP VIEW IF EXISTS campaign_summary;
+
+CREATE OR REPLACE VIEW campaign_summary AS
+SELECT 
+    c.id,
+    c.campaign_name,
+    c.template_id,
+    c.performance_mode,
+    c.status,
+    c.total_recipients,
+    c.emails_sent,
+    c.emails_failed,
+    c.success_rate,
+    c.created_at,
+    c.completed_at,
+    COUNT(el.id) as total_logs,
+    COUNT(CASE WHEN el.cc_recipients IS NOT NULL AND el.cc_recipients != '' THEN 1 END) as emails_with_cc,
+    COUNT(CASE WHEN el.bcc_recipients IS NOT NULL AND el.bcc_recipients != '' THEN 1 END) as emails_with_bcc
+FROM campaigns c
+LEFT JOIN email_logs el ON c.id = el.campaign_id
+GROUP BY c.id;
+
+-- Verify updates
+SELECT 'Database schema updated with CC/BCC support! ✅' as message;
+
+-- Check new columns
+SELECT column_name, data_type 
+FROM information_schema.columns 
+WHERE table_name = 'email_logs' 
+AND column_name IN ('cc_recipients', 'bcc_recipients');
