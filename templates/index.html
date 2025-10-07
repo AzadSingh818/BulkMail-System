@@ -1,3 +1,9 @@
+<!-- 
+IMPORTANT: Yeh file aapki current index.html file hai
+Bas isko "templates" folder mein move karna hai
+Location: templates/index.html
+-->
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5,6 +11,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PHOCON 2025 - Campaign Control Center</title>
     <style>
+        /* Yeh aapki same CSS hai - no changes */
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
         
         :root {
@@ -933,7 +940,6 @@
         function selectTemplate(id) {
             const card = document.getElementById('tpl' + id);
             
-            // Toggle: if already selected, deselect it
             if (selectedTemplate === id) {
                 selectedTemplate = null;
                 card.classList.remove('selected');
@@ -941,7 +947,6 @@
                 updateStep(3, '');
                 document.getElementById('campaignType').textContent = '---';
             } else {
-                // Deselect all and select this one
                 selectedTemplate = id;
                 document.querySelectorAll('[id^="tpl"]').forEach(el => el.classList.remove('selected'));
                 card.classList.add('selected');
@@ -957,14 +962,12 @@
         function selectEngine(id) {
             const card = document.getElementById('eng' + id);
             
-            // Toggle: if already selected, deselect it
             if (selectedEngine === id) {
                 selectedEngine = null;
                 card.classList.remove('selected');
                 updateStep(3, 'active');
                 updateStep(4, '');
             } else {
-                // Deselect all and select this one
                 selectedEngine = id;
                 document.querySelectorAll('[id^="eng"]').forEach(el => el.classList.remove('selected'));
                 card.classList.add('selected');
@@ -1053,7 +1056,6 @@
                 const data = await response.json();
                 
                 if (response.ok) {
-                    // Calculate correct success rate
                     const totalAttempts = data.total_sent + data.total_failed;
                     const correctSuccessRate = totalAttempts > 0 ? (data.total_sent / totalAttempts * 100) : 0;
                     
@@ -1062,7 +1064,6 @@
                     document.getElementById('rateStat').textContent = correctSuccessRate.toFixed(1) + '%';
                     document.getElementById('resultsPanel').style.display = 'block';
                     
-                    // Create manual download buttons (NO auto-download)
                     if (data.reports && data.reports.length > 0) {
                         const container = document.getElementById('downloadButtonsContainer');
                         container.innerHTML = '';

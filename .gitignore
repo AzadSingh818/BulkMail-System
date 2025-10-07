@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+.Python
+*.so
+
+# Virtual Environment
+venv/
+env/
+
+# Environment Variables
+.env
+.env.local
+
+# Uploads
+uploads/
+*.xlsx
+*.xls
+*.jpg
+*.jpeg
+*.png
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Vercel
+.vercel

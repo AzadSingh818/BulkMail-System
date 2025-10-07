@@ -197,71 +197,75 @@ class PHOCONFastEmailSender:
         """
         return subject, body
     
-    def create_abstract_submission_email(self, doctor_name):
-        """Template 2: Abstract submission reminder email content"""
-        subject = "PHOCON 2025 Abstracts – Last Call, Hurry Up...!"
-        
-        body = f"""
-        <html>
-        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-        
-        <p style="font-size: 16px;"><strong>Dear {doctor_name}</strong></p>
-        
-        <div style="background-color: #ff6b6b; color: white; padding: 15px; text-align: center; border-radius: 8px; margin: 20px 0;">
-        <h2 style="margin: 0; font-size: 24px;">⏰ ONLY 10 DAYS LEFT!</h2>
-        <p style="margin: 5px 0 0 0; font-size: 16px;">Don't miss this opportunity!</p>
-        </div>
-        
-        <p style="font-size: 14px;">Submit your abstract for <strong>PHOCON 2025</strong> (28–30 November, Manipal).</p>
-        
-        <div style="background-color: #f8f9fa; padding: 15px; border-left: 4px solid #28a745; margin: 20px 0;">
-        <p style="margin: 0; font-size: 14px;"><strong>🏆 Showcase your research & gain recognition!</strong></p>
-        <p style="margin: 5px 0 0 0; font-size: 14px;">Join leading experts in Pediatric Hematology & Oncology</p>
-        </div>
-        
-        <div style="background-color: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 20px 0;">
-        <p style="margin: 0; font-size: 14px;"><strong>📅 Conference Dates:</strong> 28–30 November 2025</p>
-        <p style="margin: 5px 0 0 0; font-size: 14px;"><strong>📍 Venue:</strong> Kasturba Medical College, Manipal</p>
-        </div>
-        
-        <div style="text-align: center; margin: 30px 0;">
-        <a href="https://phocon-conference-system.vercel.app/" style="background-color: #28a745; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-size: 18px; font-weight: bold; display: inline-block;">
-        🚀 SUBMIT NOW
-        </a>
-        </div>
-        
-        <div style="background-color: #d1ecf1; padding: 15px; border-left: 4px solid #17a2b8; margin: 20px 0;">
-        <p style="margin: 0; font-size: 14px;"><strong>🎯 Why Submit Your Abstract?</strong></p>
-        <ul style="font-size: 13px; margin: 10px 0 0 0; padding-left: 20px;">
-        <li>Present to leading pediatric specialists</li>
-        <li>Network with experts in your field</li>
-        <li>Get published in conference proceedings</li>
-        <li>Win recognition awards</li>
-        </ul>
-        </div>
-        
-        <div style="text-align: center; margin: 20px 0;">
-        <img src="cid:phocon_abstract_image" style="max-width: 100%; height: auto; border-radius: 8px;" alt="PHOCON Abstract Submission">
-        </div>
-        
-        <div style="text-align: center; background-color: #f8d7da; padding: 15px; border-radius: 8px; margin: 20px 0;">
-        <p style="margin: 0; font-size: 16px; color: #721c24;"><strong>⚠ DEADLINE APPROACHING FAST!</strong></p>
-        <p style="margin: 5px 0 0 0; font-size: 14px; color: #721c24;">Submit before it's too late!</p>
-        </div>
-        
-        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
-        <p style="font-size: 14px; margin: 0;">Warm Regards,</p>
-        <p style="font-size: 14px; margin: 0;"><strong>Team PHOCON 2025</strong></p>
-        <p style="font-size: 12px; color: #666; margin: 10px 0 0 0;">Kasturba Medical College, Manipal</p>
-        </div>
-        
-        </div>
-        </body>
-        </html>
-        """
-        
-        return subject, body
+def create_mahanavami_offer_email(self, doctor_name):
+    """Template: Mahanavami special offer email content"""
+    subject = "Special Mahanavami Offer – Exclusive Discounts on PHOCON 2025 Workshops!"
+
+    body = f"""
+    <html>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+    <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+
+    <p style="font-size: 16px;"><strong>Dear {doctor_name}</strong></p>
+
+    <div style="background-color: #ff6b6b; color: white; padding: 15px; text-align: center; border-radius: 8px; margin: 20px 0;">
+    <h2 style="margin: 0; font-size: 24px;">🎉 Celebrate Mahanavami!</h2>
+    <p style="margin: 5px 0 0 0; font-size: 16px;">Exclusive Discounted Rates on PHOCON 2025 Workshops</p>
+    </div>
+
+    <div style="background-color: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 20px 0;">
+    <p style="margin: 0; font-size: 14px;"><strong>⏰ Offer Valid:</strong> Only on 1st & 2nd October</p>
+    <p style="margin: 5px 0 0 0; font-size: 14px; color: #856404;"><strong>Don't miss it!</strong></p>
+    </div>
+
+    <div style="background-color: #f8f9fa; padding: 15px; border-left: 4px solid #28a745; margin: 20px 0;">
+    <p style="margin: 0; font-size: 14px;"><strong>🎊 Limited-Time Festive Offer</strong></p>
+    <p style="margin: 5px 0 0 0; font-size: 14px;">Register soon and take advantage of exclusive workshop discounts!</p>
+    </div>
+
+    <div style="background-color: #d1ecf1; padding: 15px; border-left: 4px solid #17a2b8; margin: 20px 0;">
+    <p style="margin: 0; font-size: 14px;"><strong>🔬 Explore Wide Range of Workshops & Scientific Sessions</strong></p>
+    <p style="margin: 10px 0 0 0; font-size: 13px;">From hands-on training to cutting-edge research presentations</p>
+    </div>
+
+    <div style="text-align: center; margin: 30px 0;">
+    <a href="https://phocon2025.com/workshop-programme/" style="background-color: #17a2b8; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-size: 16px; font-weight: bold; display: inline-block; margin: 5px;">
+    📋 VIEW WORKSHOPS
+    </a>
+    </div>
+
+    <div style="text-align: center; margin: 30px 0;">
+    <a href="https://followmyevent.com/phocon-2025/" style="background-color: #28a745; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-size: 18px; font-weight: bold; display: inline-block;">
+    🚀 REGISTER NOW
+    </a>
+    </div>
+
+    <div style="text-align: center; margin: 20px 0;">
+    <img src="cid:phocon_abstract_image" style="max-width: 100%; height: auto; border-radius: 8px;" alt="PHOCON Mahanavami Offer">
+    </div>
+
+    <div style="text-align: center; background-color: #f8d7da; padding: 15px; border-radius: 8px; margin: 20px 0;">
+    <p style="margin: 0; font-size: 16px; color: #721c24;"><strong>⚠ LIMITED TIME OFFER!</strong></p>
+    <p style="margin: 5px 0 0 0; font-size: 14px; color: #721c24;">Valid only on 1st & 2nd October</p>
+    </div>
+
+    <div style="background-color: #e7f3ff; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: center;">
+    <p style="margin: 0; font-size: 14px;"><strong>📞 For Queries:</strong></p>
+    <p style="margin: 5px 0 0 0; font-size: 16px; color: #004085;"><strong>+91 63646 90353</strong></p>
+    </div>
+
+    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
+    <p style="font-size: 14px; margin: 0;">Warm Regards,</p>
+    <p style="font-size: 14px; margin: 0;"><strong>Team PHOCON 2025</strong></p>
+    <p style="font-size: 12px; color: #666; margin: 10px 0 0 0;">Kasturba Medical College, Manipal</p>
+    </div>
+
+    </div>
+    </body>
+    </html>
+    """
+
+    return subject, body
 
     def create_final_abstract_reminder_email(self, doctor_name):
         """Template 3: Early Bird Ends Soon"""

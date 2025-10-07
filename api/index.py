@@ -1,20 +1,27 @@
-from flask import Flask, render_template, request, jsonify, session, send_from_directory
-from flask_cors import CORS
+from flask import Flask, render_template, request, jsonify, session, send_file
 from werkzeug.utils import secure_filename
 import os
-from phocon_email_sender import PHOCONFastEmailSender
-from datetime import datetime
 import secrets
 import pandas as pd
+from datetime import datetime
+import sys
 
-app = Flask(__name__)
-CORS(app)  # Enable CORS
-app.secret_key = secrets.token_hex(16)
-app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Create uploads folder
-os.makedirs('uploads', exist_ok=True)
+# Import from same directory
+from phocon_email_sender import PHOCONFastEmailSender
+
+# Flask app with correct template folder
+app = Flask(__name__, template_folder='../templates')
+app.secret_key = os.getenv('SECRET_KEY', secrets.token_hex(16))
+
+# Use /tmp for Vercel (temporary storage)
+UPLOAD_FOLDER = '/tmp/uploads'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
 
 ALLOWED_EXTENSIONS = {'xlsx', 'xls'}
 ALLOWED_IMAGES = {'jpg', 'jpeg', 'png'}
@@ -26,10 +33,18 @@ def allowed_file(filename, allowed_set):
 def index():
     return render_template('index.html')
 
+@app.route('/health')
+def health():
+    """Health check endpoint"""
+    return jsonify({
+        'status': 'healthy',
+        'platform': 'vercel',
+        'timestamp': datetime.now().isoformat()
+    })
+
 @app.route('/upload', methods=['POST'])
 def upload_files():
     try:
-        # Check if files are present
         if 'excel_file' not in request.files:
             return jsonify({'error': 'Excel file is required'}), 400
         
@@ -44,11 +59,10 @@ def upload_files():
         if not allowed_file(excel_file.filename, ALLOWED_EXTENSIONS):
             return jsonify({'error': 'Invalid Excel file format'}), 400
         
-        # Save files
+        # Save files to /tmp
         excel_path = os.path.join(app.config['UPLOAD_FOLDER'], secure_filename(excel_file.filename))
         excel_file.save(excel_path)
         
-        # Save images if provided
         conference_path = None
         abstract_path = None
         creative_path = None
@@ -67,6 +81,7 @@ def upload_files():
         
         # Store paths in session
         session['excel_path'] = excel_path
+        session['excel_filename'] = excel_file.filename
         session['conference_path'] = conference_path or ''
         session['abstract_path'] = abstract_path or ''
         session['creative_path'] = creative_path or ''
@@ -89,7 +104,6 @@ def send_emails():
         if not template or not performance_mode:
             return jsonify({'error': 'Template and performance mode required'}), 400
         
-        # Get file paths from session
         excel_path = session.get('excel_path')
         conference_path = session.get('conference_path', '')
         abstract_path = session.get('abstract_path', '')
@@ -106,14 +120,14 @@ def send_emails():
             creative_path
         )
         
-        # Set template and performance mode
         email_sender.selected_template = template
         
+        # Performance settings (Vercel ke liye optimized)
         performance_settings = {
             '1': {'workers': 1, 'delay': 0.5},
             '2': {'workers': 5, 'delay': 0.1},
-            '3': {'workers': 10, 'delay': 0.05},
-            '4': {'workers': 15, 'delay': 0.02}
+            '3': {'workers': 8, 'delay': 0.05},   # 10 se kam kar diya
+            '4': {'workers': 10, 'delay': 0.02}   # 15 se kam kar diya
         }
         
         settings = performance_settings.get(performance_mode)
@@ -129,19 +143,21 @@ def send_emails():
         skipped_list = []
         
         while not email_sender.successful_emails.empty():
-            successful_list.append(email_sender.successful_emails.get())
+            email_data = email_sender.successful_emails.get()
+            successful_list.append(email_data)
         
         while not email_sender.failed_emails.empty():
-            failed_list.append(email_sender.failed_emails.get())
+            email_data = email_sender.failed_emails.get()
+            failed_list.append(email_data)
             
         while not email_sender.skipped_emails.empty():
-            skipped_list.append(email_sender.skipped_emails.get())
+            email_data = email_sender.skipped_emails.get()
+            skipped_list.append(email_data)
         
-        # Generate Excel reports with timestamp
+        # Generate Excel reports
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         report_files = []
         
-        # Save successful emails report
         if successful_list:
             success_df = pd.DataFrame(successful_list)
             success_file = f"successful_emails_template{template}_{timestamp}.xlsx"
@@ -152,9 +168,7 @@ def send_emails():
                 'filename': success_file,
                 'count': len(successful_list)
             })
-            print(f"✅ Success report created: {success_file}")
         
-        # Save failed emails report
         if failed_list or skipped_list:
             failed_df = pd.DataFrame(failed_list + skipped_list)
             failed_file = f"failed_emails_template{template}_{timestamp}.xlsx"
@@ -165,14 +179,9 @@ def send_emails():
                 'filename': failed_file,
                 'count': len(failed_list) + len(skipped_list)
             })
-            print(f"❌ Failed report created: {failed_file}")
         
         total_attempts = len(successful_list) + len(failed_list)
         success_rate = (len(successful_list) / total_attempts * 100) if total_attempts > 0 else 0
-        
-        print(f"📊 Reports generated: {len(report_files)} files")
-        for report in report_files:
-            print(f"   - {report['filename']} ({report['count']} records)")
         
         return jsonify({
             'success': success,
@@ -183,51 +192,29 @@ def send_emails():
         })
     
     except Exception as e:
-        print(f"❌ Error in send_emails: {str(e)}")
+        print(f"Error in send_emails: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 @app.route('/download/<filename>')
 def download_report(filename):
-    """Download generated report files"""
     try:
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         
-        # Security check
         if not os.path.exists(file_path):
-            print(f"❌ File not found: {file_path}")
             return jsonify({'error': 'File not found'}), 404
         
-        # Check if file is in allowed directory
-        abs_upload_folder = os.path.abspath(app.config['UPLOAD_FOLDER'])
-        abs_file_path = os.path.abspath(file_path)
-        
-        if not abs_file_path.startswith(abs_upload_folder):
-            print("⚠️ Security: Attempted access outside upload folder")  
-            return jsonify({'error': 'Invalid file path'}), 403
-        
-        print(f"📥 Downloading: {filename}")
-        
-        # Use send_from_directory for better security and compatibility
-        return send_from_directory(
-            app.config['UPLOAD_FOLDER'],
-            filename,
+        return send_file(
+            file_path,
             as_attachment=True,
+            download_name=filename,
             mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
     
     except Exception as e:
-        print(f"❌ Download error: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        print(f"Download error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-if __name__ == '__main__':
-    print("=" * 70)
-    print("🚀 PHOCON 2025 Campaign Control Center")
-    print("=" * 70)
-    print("📁 Upload folder:", os.path.abspath(app.config['UPLOAD_FOLDER']))
-    print("🌐 Server: http://localhost:5000")
-    print("=" * 70)
-    app.run(debug=True, port=5000)
+# IMPORTANT: Vercel ke liye yeh line zaroori hai
+app = app
